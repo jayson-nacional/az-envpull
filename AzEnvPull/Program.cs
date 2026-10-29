@@ -1,10 +1,12 @@
-﻿using System.CommandLine;
+﻿using System.Text.RegularExpressions;
+using System.CommandLine;
 using Azure;
 using Azure.Core;
 using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.AppService;
 using Azure.ResourceManager.AppService.Models;
+using Azure.Security.KeyVault.Secrets;
 
 var appOption = new Option<string>("--app")
 {
@@ -69,12 +71,6 @@ rootCommand.SetAction(async (parseResult) =>
     var subscriptionId = parseResult.GetValue(subscriptionOption)!;
     var extractSecrets = parseResult.GetValue(extractSecretsOption);
 
-    Console.WriteLine("Configuration extraction started.");
-    Console.WriteLine($"App: {app}");
-    Console.WriteLine($"Resource Group: {resourceGroup}");
-    Console.WriteLine($"Subscription ID: {subscriptionId}");
-    Console.WriteLine($"Extract Secrets: {extractSecrets}");
-
     var credential = new DefaultAzureCredential();
     var tokenRequestContext = new TokenRequestContext(new[]
             {
@@ -85,6 +81,8 @@ rootCommand.SetAction(async (parseResult) =>
     {
         AccessToken accessToken = await credential.GetTokenAsync(tokenRequestContext);
         Console.WriteLine("Successfully authenticated!");
+        Console.WriteLine("Configuration extraction started...");
+        Console.WriteLine();
     }
     catch (AuthenticationFailedException)
     {
@@ -118,10 +116,60 @@ rootCommand.SetAction(async (parseResult) =>
 
     foreach (var setting in settings.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
     {
-        Console.WriteLine($"{setting.Key}: {setting.Value}");
+        if (extractSecrets && setting.Value.StartsWith("@Microsoft.KeyVault"))
+        {
+            var secretUri = ExtractSecretUri(setting.Value);
+            var uri = new Uri(secretUri);
+
+            string[] segments = uri.AbsolutePath
+                .Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+            if (segments.Length < 2 ||
+                !segments[0].Equals("secrets",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    "Expected a Key Vault secret URI: /secrets/{secret-name}.");
+            }
+
+            string secretName = Uri.UnescapeDataString(segments[1]);
+            string? version = segments.Length > 2
+                ? Uri.UnescapeDataString(segments[2])
+                : null;
+
+            var vaultUri = new Uri(uri.GetLeftPart(UriPartial.Authority));
+            var client = new SecretClient(vaultUri, credential);
+            KeyVaultSecret secret =
+                (await client.GetSecretAsync(secretName, version)).Value;
+
+            Console.WriteLine($"\"{setting.Key}\": \"{secret.Value}\",");
+        }
+        else
+        {
+            Console.WriteLine($"\"{setting.Key}\": \"{setting.Value}\",");
+        }
     }
+
     Console.WriteLine(new string('-', 60));
 });
 
-return await rootCommand.Parse(args).InvokeAsync();
+static string ExtractSecretUri(string reference)
+{
+    const string pattern =
+        @"^\s*@Microsoft\.KeyVault\s*\(\s*SecretUri\s*=\s*(https://[^)\s]+)\s*\)\s*$";
 
+    Match match = Regex.Match(
+        reference,
+        pattern,
+        RegexOptions.IgnoreCase);
+
+    if (!match.Success)
+    {
+        throw new FormatException(
+            "Expected @Microsoft.KeyVault(SecretUri=https://...).");
+    }
+
+    return match.Groups[1].Value;
+}
+
+return await rootCommand.Parse(args).InvokeAsync();
