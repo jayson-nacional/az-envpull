@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
 
 	<PackageId>Nash.AzEnvPull</PackageId>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Authors>Jayson Nacional</Authors>
 	<PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <Description>CLI tool for extracting Azure App Service configurations.</Description>
