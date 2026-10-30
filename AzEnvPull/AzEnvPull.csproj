@@ -7,15 +7,17 @@
     <Nullable>enable</Nullable>
 
 	<PackageId>Nash.AzEnvPull</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.2</Version>
     <Authors>Jayson Nacional</Authors>
-	<PackageLicenseExpression>GPL-3.0</PackageLicenseExpression>
+	<PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <Description>CLI tool for extracting Azure App Service configurations.</Description>
     <PackageTags>azure;appservice;cli;configuration</PackageTags>
 
 	<PackAsTool>true</PackAsTool>
 	<ToolCommandName>az-envpull</ToolCommandName>
 	<PackageOutputPath>./nupkg</PackageOutputPath>
+
+	<PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,6 +27,10 @@
     <PackageReference Include="Azure.ResourceManager.AppService" Version="1.5.0" />
     <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.12.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+	  <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

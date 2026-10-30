@@ -1,5 +1,4 @@
-﻿using System.Text.RegularExpressions;
-using System.CommandLine;
+﻿using System.CommandLine;
 using Azure;
 using Azure.Core;
 using Azure.Identity;
@@ -87,10 +86,12 @@ rootCommand.SetAction(async (parseResult) =>
     catch (AuthenticationFailedException)
     {
         Console.WriteLine($"Authentication failed: run 'az login' and try again.");
+        return;
     }
     catch (Exception)
     {
         Console.WriteLine($"An error occurred");
+        return;
     }
 
     var armClient = new ArmClient(credential);
@@ -116,31 +117,40 @@ rootCommand.SetAction(async (parseResult) =>
 
     foreach (var setting in settings.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
     {
-        if (extractSecrets && setting.Value.StartsWith("@Microsoft.KeyVault"))
+        if (extractSecrets && setting.Value.StartsWith("@Microsoft.KeyVault("))
         {
-            var secretUri = ExtractSecretUri(setting.Value);
-            var uri = new Uri(secretUri);
+            string secretName = string.Empty;
+            Uri? vaultUri = null;
 
-            string[] segments = uri.AbsolutePath
-                .Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-            if (segments.Length < 2 ||
-                !segments[0].Equals("secrets",
-                    StringComparison.OrdinalIgnoreCase))
+            if (setting.Value.Contains("SecretUri="))
             {
-                throw new ArgumentException(
-                    "Expected a Key Vault secret URI: /secrets/{secret-name}.");
+                if (!KeyVaultReferenceParser.TryParseUriFormat(
+                            setting.Value,
+                            out vaultUri,
+                            out secretName))
+
+                {
+                    Console.WriteLine($"Variable {setting.Key} cannot be processed");
+                }
+            }
+            else if (setting.Value.Contains("VaultName="))
+            {
+                if (!KeyVaultReferenceParser.TryParseKeyValueFormat(
+                            setting.Value,
+                            out string vaultName,
+                            out secretName))
+                {
+                    Console.WriteLine($"Variable {setting.Key} cannot be processed");
+                }
+                else
+                {
+                    vaultUri = new Uri($"https://{vaultName}.vault.azure.net");
+                }
             }
 
-            string secretName = Uri.UnescapeDataString(segments[1]);
-            string? version = segments.Length > 2
-                ? Uri.UnescapeDataString(segments[2])
-                : null;
-
-            var vaultUri = new Uri(uri.GetLeftPart(UriPartial.Authority));
             var client = new SecretClient(vaultUri, credential);
             KeyVaultSecret secret =
-                (await client.GetSecretAsync(secretName, version)).Value;
+                (await client.GetSecretAsync(secretName)).Value;
 
             Console.WriteLine($"\"{setting.Key}\": \"{secret.Value}\",");
         }
@@ -152,24 +162,5 @@ rootCommand.SetAction(async (parseResult) =>
 
     Console.WriteLine(new string('-', 60));
 });
-
-static string ExtractSecretUri(string reference)
-{
-    const string pattern =
-        @"^\s*@Microsoft\.KeyVault\s*\(\s*SecretUri\s*=\s*(https://[^)\s]+)\s*\)\s*$";
-
-    Match match = Regex.Match(
-        reference,
-        pattern,
-        RegexOptions.IgnoreCase);
-
-    if (!match.Success)
-    {
-        throw new FormatException(
-            "Expected @Microsoft.KeyVault(SecretUri=https://...).");
-    }
-
-    return match.Groups[1].Value;
-}
 
 return await rootCommand.Parse(args).InvokeAsync();
