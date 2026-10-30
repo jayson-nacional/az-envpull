@@ -116,9 +116,15 @@ rootCommand.SetAction(async (parseResult) =>
         return;
     }
 
+    /* performance optimization - ensures only a single secret client is created 
+	 * per unique key vault URI */
+    var secretClients = new Dictionary<Uri, SecretClient>();
+
     var output = new Dictionary<string, string>();
     foreach (var setting in settings.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
     {
+        Console.WriteLine($"Extracting variable: {setting.Key}");
+
         if (extractSecrets && setting.Value.StartsWith("@Microsoft.KeyVault("))
         {
             string secretName = string.Empty;
@@ -158,11 +164,18 @@ rootCommand.SetAction(async (parseResult) =>
             }
             else
             {
-                var client = new SecretClient(vaultUri, credential);
-                KeyVaultSecret secret =
-                    (await client.GetSecretAsync(secretName)).Value;
+                if (vaultUri != null)
+                {
+                    if (!secretClients.TryGetValue(vaultUri, out var client))
+                    {
+                        var newClient = new SecretClient(vaultUri, credential);
+                        secretClients[vaultUri] = newClient;
+                    }
 
-                output.Add(setting.Key, secret.Value);
+                    KeyVaultSecret secret =
+                        (await secretClients[vaultUri].GetSecretAsync(secretName)).Value;
+                    output.Add(setting.Key, secret.Value);
+                }
             }
         }
         else
@@ -177,9 +190,11 @@ rootCommand.SetAction(async (parseResult) =>
     };
 
     string jsonString = JsonSerializer.Serialize(output, options);
-    Console.WriteLine(jsonString);
 
     Console.WriteLine(new string('-', 60));
+    Console.WriteLine(jsonString);
+    Console.WriteLine(new string('-', 60));
+    Console.WriteLine("Completed!");
 });
 
 return await rootCommand.Parse(args).InvokeAsync();
