@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
 
 	<PackageId>Nash.AzEnvPull</PackageId>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Authors>Jayson Nacional</Authors>
 	<PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <Description>CLI tool for extracting Azure App Service configurations.</Description>
@@ -30,7 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <None Include="README.md" Pack="true" PackagePath="\" />
+	  <None Include="..\README.md" Pack="true" PackagePath="" Link="README.md" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 ﻿using System.CommandLine;
+using System.Text.Json;
 using Azure;
 using Azure.Core;
 using Azure.Identity;
@@ -115,6 +116,7 @@ rootCommand.SetAction(async (parseResult) =>
         return;
     }
 
+    var output = new Dictionary<string, string>();
     foreach (var setting in settings.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
     {
         if (extractSecrets && setting.Value.StartsWith("@Microsoft.KeyVault("))
@@ -130,7 +132,8 @@ rootCommand.SetAction(async (parseResult) =>
                             out secretName))
 
                 {
-                    Console.WriteLine($"Variable {setting.Key} cannot be processed");
+                    vaultUri = null;
+                    secretName = string.Empty;
                 }
             }
             else if (setting.Value.Contains("VaultName="))
@@ -140,7 +143,8 @@ rootCommand.SetAction(async (parseResult) =>
                             out string vaultName,
                             out secretName))
                 {
-                    Console.WriteLine($"Variable {setting.Key} cannot be processed");
+                    vaultUri = null;
+                    secretName = string.Empty;
                 }
                 else
                 {
@@ -148,17 +152,32 @@ rootCommand.SetAction(async (parseResult) =>
                 }
             }
 
-            var client = new SecretClient(vaultUri, credential);
-            KeyVaultSecret secret =
-                (await client.GetSecretAsync(secretName)).Value;
+            if (vaultUri == null || secretName == string.Empty)
+            {
+                output.Add(setting.Key, "value cannot be processed");
+            }
+            else
+            {
+                var client = new SecretClient(vaultUri, credential);
+                KeyVaultSecret secret =
+                    (await client.GetSecretAsync(secretName)).Value;
 
-            Console.WriteLine($"\"{setting.Key}\": \"{secret.Value}\",");
+                output.Add(setting.Key, secret.Value);
+            }
         }
         else
         {
-            Console.WriteLine($"\"{setting.Key}\": \"{setting.Value}\",");
+            output.Add(setting.Key, setting.Value);
         }
     }
+
+    var options = new JsonSerializerOptions
+    {
+        WriteIndented = true
+    };
+
+    string jsonString = JsonSerializer.Serialize(output, options);
+    Console.WriteLine(jsonString);
 
     Console.WriteLine(new string('-', 60));
 });
